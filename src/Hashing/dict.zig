@@ -9,7 +9,37 @@ const DictEntry = struct {
     next: ?*DictEntry,
 };
 
-// -------------------------------------------------------CHECK LEFT-----------------------------------------------------------------------------------------
+const Dict = struct {
+    table: **DictEntry,
+    Type: *DictType,
+    size: u32,
+    sizemask: u32,
+    used: u32,
+    privdata: ?*void,
+};
+
+const DictIterator = struct {
+    ht: *Dict,
+    index: i32,
+    entry: *DictEntry,
+    nextEntry: *DictEntry,
+};
+
+const DICT_HT_INITIAL_SIZE: u32 = 16;
+
+// Function to compute the hash value for an integer key
+pub fn dictIntHashFunction(ke: u32) u32 {
+    var key: u32 = ke;
+    key += (key << 15);
+    key ^= (key >> 10);
+    key += (key << 3);
+    key ^= (key >> 6);
+    key += (key << 11);
+    key ^= (key >> 16);
+    return key;
+}
+
+// -------------------------------------------------------TEST CHECK LEFT-----------------------------------------------------------------------------------------
 const DictType = struct {
     hashFunction: fn (key: ?*const u8) u32,
     keyDup: fn (privdata: ?*void, key: ?*const u8) ?*void,
@@ -73,37 +103,69 @@ pub fn dictExpand(ht: *Dict, size: u32) c_int {
     return DICT_OK;
 }
 
-// -------------------------------------------------------CHECK LEFT-----------------------------------------------------------------------------------------
 
-const Dict = struct {
-    table: **DictEntry,
-    Type: *DictType,
-    size: u32,
-    sizemask: u32,
-    used: u32,
-    privdata: ?*void,
-};
+pub fn dictKeyIndex(comptime T:type,ht: *Dict, key: T) i32 {
+    var h: u32;
+    var he: *DictEntry;
 
-const DictIterator = struct {
-    ht: *Dict,
-    index: i32,
-    entry: *DictEntry,
-    nextEntry: *DictEntry,
-};
+    // /* Expand the hashtable if needed */
+    if (dictExpandIfNeeded(ht) == DICT_ERR) {
+        return -1;
+    }
 
-const DICT_HT_INITIAL_SIZE: u32 = 16;
+    // /* Compute the key hash value */
+    h = dictHashKey(ht, key) & ht.sizemask;
 
-// Function to compute the hash value for an integer key
-pub fn dictIntHashFunction(ke: u32) u32 {
-    var key: u32 = ke;
-    key += (key << 15);
-    key ^= (key >> 10);
-    key += (key << 3);
-    key ^= (key >> 6);
-    key += (key << 11);
-    key ^= (key >> 16);
-    return key;
+    // /* Search if this slot does not already contain the given key */
+    he = ht.table[h];
+    while (he != null) {
+        if (dictCompareHashKeys(ht, key, he.key)) {
+            return -1;
+        }
+        he = he.next;
+    }
+
+    return h;
 }
+
+
+pub fn dictAdd(comptime T1:type,comptime T2:type,ht: *Dict, key: T1, val: t2) i8 {
+    var index: i8=undefined;
+    var entry: *DictEntry=undefined;
+
+    // /* Get the index of the new element, or -1 if
+    //  * the element already exists. */
+    const index = dictKeyIndex(t1,ht, key);
+    if (index == -1) {
+        return DICT_ERR;
+    }
+
+    // /* Allocates the memory and stores key */
+    entry = try _dictAlloc(*DictEntry,@sizeOf(DictEntry));
+    entry.next = ht.table[index];
+    ht.table[index] = entry;
+
+    // /* Set the hash entry fields. */
+    dictSetHashKey(ht, entry, key);
+    dictSetHashVal(ht, entry, val);
+    ht.used += 1;
+    return DICT_OK;
+}
+
+pub fn dictSetHashKey(comptime T:type,ht: *Dict, entry: *DictEntry, key: T) void {
+    if (ht.Type.keyDup != null) {
+        entry.key = ht.Type.keyDup(ht.privdata, key);
+    } else {
+        entry.key = key;
+    }
+}
+
+
+
+
+
+// -------------------------------------------------------TEST CHECK LEFT-----------------------------------------------------------------------------------------
+
 
 pub fn dictGenHashFunction(buf: []const u8, len: usize) u64 {
     var hash: u64 = 5381;
@@ -152,3 +214,32 @@ fn dictNextPower(size: u32) u32 {
         i *= 2;
     }
 }
+
+pub fn dictExpandIfNeeded(ht: *Dict) i8 {
+    if (ht.size == 0) {
+        return dictExpand(ht, DICT_HT_INITIAL_SIZE);
+    }
+    if (ht.used == ht.size) {
+        return dictExpand(ht, ht.size * 2);
+    }
+    return DICT_OK;
+}
+
+pub fn dictCompareHashKeys(comptime T: type,ht: *Dict, key1: T, key2: T) bool {
+    if (ht.Type.keyCompare != null) {
+        return ht.Type.keyCompare(ht.privdata, key1, key2);
+    } else {
+        // Assuming that the keys are pointers and we are doing a simple pointer comparison
+        return key1 == key2;
+    }
+}
+
+pub fn dictHashKey(comptime T: type,ht: *Dict, key:T) u32 {
+    return ht.Type.hashFunction(T,key);
+}
+
+
+
+
+
+
