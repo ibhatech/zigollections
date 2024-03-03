@@ -2,10 +2,10 @@ const std = @import("std");
 
 var used_memory: usize = 0;
 
-pub fn zmalloc(comptime T: type, size: T) !?[]u8 {
+pub fn zmalloc(comptime T: type, size: usize) !?[]T {
     const total_size: usize = size + @sizeOf(usize);
     const allocator = std.heap.page_allocator;
-    const memory = try allocator.alloc(u8, total_size);
+    const memory = try allocator.alloc(T, total_size);
     used_memory += total_size;
     return memory;
 }
@@ -25,6 +25,6 @@ pub fn zstrdup(s: []const u8) !?[]u8 {
     return p;
 }
 
-pub fn zmalloc_used_memory(void) usize {
+pub fn zmalloc_used_memory() usize {
     return used_memory;
 }
