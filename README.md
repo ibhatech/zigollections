@@ -8,4 +8,4 @@
 ## How to get this repo working?
 --> Go to /src file
 --> Go to your data structure, eg /Hashing
---> For testing the test files, eg testCreate run the command zig test testCreate
+--> For testing the test files, eg testCreate run the command zig test testCreate.zig
